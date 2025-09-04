@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            width: 100%;
+            padding: 2rem;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        input, select {
+            border: 1px solid #d1d5db;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            width: 100%;
+            transition: border-color 0.2s ease-in-out;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 0.5rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 1rem;
+        }
+        th {
+            background-color: #f9fafb;
+            color: #4b5563;
+            font-weight: 600;
+        }
+        td {
+            background-color: #fefefe;
+        }
+        tr:not(:first-child) td {
+            border-top: 1px solid #e5e7eb;
+        }
+        .status-present {
+            color: #10b981;
+            font-weight: 600;
+        }
+        .status-absent {
+            color: #ef4444;
+            font-weight: 600;
+        }
+        .alert-box {
+            background-color: #fecaca;
+            color: #b91c1c;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #2563eb;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app" class="container">
+        <!-- Main content area, handled by JavaScript -->
+    </div>
+
+    <!-- Supabase Library Import -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script type="module">
+        // Supabase credentials provided by the user
+        const SUPABASE_URL = 'https://nbkduqhirhnirxssribc.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ia2R1cWhpcmhuaXJ4c3NyaWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5MTE5ODksImV4cCI6MjA3MjQ4Nzk4OX0.4hEnQwToDplh3kqth_OA45TEpSLlaQPJ1S3Jl3tEHMA';
+        
+        let supabase;
+        let userRole = 'student'; // Default role
+        let userId = null; // Will store the user's ID
+
+        // --- UI Rendering Functions ---
+
+        const renderLogin = (error = null) => {
+            const appDiv = document.getElementById('app');
+            appDiv.innerHTML = `
+                <div id="login-form" class="card p-8 sm:p-12 w-full max-w-md mx-auto">
+                    <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Attendance Portal</h1>
+                    ${error ? <div class="alert-box mb-4">${error}</div> : ''}
+                    <form id="login-form-fields" class="space-y-4">
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <input type="email" id="email" name="email" class="w-full" placeholder="Enter your email" required>
+                        </div>
+                        <div>
+                            <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                            <input type="password" id="password" name="password" class="w-full" placeholder="Enter your password" required>
+                        </div>
+                        <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                            Login
+                        </button>
+                    </form>
+                </div>
+            `;
+            document.getElementById('login-form-fields').addEventListener('submit', handleLogin);
+        };
+
+        const renderDashboard = async () => {
+            const appDiv = document.getElementById('app');
+            // Fetch user name from profiles table using userId
+            const { data: userData, error: userError } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', userId)
+                .single();
+            const userName = userData?.full_name || 'User';
+
+            appDiv.innerHTML = `
+                <div class="card p-8 sm:p-12 w-full">
+                    <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
+                        <h1 class="text-3xl font-bold text-gray-800">Hello, ${userName}!</h1>
+                        <button id="logout-btn" class="mt-4 sm:mt-0 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors duration-200">
+                            Logout
+                        </button>
+                    </div>
+                    <div id="dashboard-content" class="mt-8">
+                        <!-- Content will be loaded dynamically -->
+                        <div class="flex justify-center items-center h-48">
+                            <div class="loading-spinner"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('logout-btn').addEventListener('click', handleLogout);
+        };
+
+        const renderStudentView = (enrolledSubjects, attendanceData) => {
+            const contentDiv = document.getElementById('dashboard-content');
+            if (!contentDiv) return;
+            
+            // Map attendance data to a more accessible format
+            const attendanceMap = attendanceData.reduce((acc, record) => {
+                const subjectId = record.subject_id;
+                if (!acc[subjectId]) {
+                    acc[subjectId] = { present: 0, total: 0 };
+                }
+                acc[subjectId].total += 1;
+                if (record.status === 'present') {
+                    acc[subjectId].present += 1;
+                }
+                return acc;
+            }, {});
+
+            // Create table rows for all enrolled subjects
+            const tableRows = enrolledSubjects.map(subject => {
+                const stats = attendanceMap[subject.subject_id] || { present: 0, total: 0 };
+                const percentage = stats.total > 0 ? ((stats.present / stats.total) * 100).toFixed(2) : 0;
+                return `
+                    <tr class="shadow-sm rounded-lg">
+                        <td class="rounded-l-lg">${subject.subjects.subject_name}</td>
+                        <td>${stats.present} / ${stats.total}</td>
+                        <td class="rounded-r-lg ${percentage < 75 ? 'status-absent' : 'status-present'}">${percentage}%</td>
+                    </tr>
+                `;
+            }).join('');
+
+            contentDiv.innerHTML = `
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Your Attendance</h2>
+                <div class="overflow-x-auto">
+                    <table>
+                        <thead>
+                            <tr class="rounded-lg">
+                                <th class="rounded-l-lg">Subject</th>
+                                <th>Present / Total</th>
+                                <th class="rounded-r-lg">Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        };
+
+        const renderTeacherView = (enrolledStudents, attendanceData) => {
+            const contentDiv = document.getElementById('dashboard-content');
+            if (!contentDiv) return;
+
+            if (enrolledStudents.length === 0) {
+                contentDiv.innerHTML = <p class="text-center text-gray-600">No students enrolled in your subjects.</p>;
+                return;
+            }
+
+            // Map attendance data for quick lookups
+            const attendanceMap = attendanceData.reduce((acc, record) => {
+                const key = ${record.student_id}-${record.subject_id};
+                if (!acc[key]) {
+                    acc[key] = { present: 0, total: 0 };
+                }
+                acc[key].total += 1;
+                if (record.status === 'present') {
+                    acc[key].present += 1;
+                }
+                return acc;
+            }, {});
+
+            // Group students by subject
+            const groupedBySubject = enrolledStudents.reduce((acc, enrollment) => {
+                const subjectName = enrollment.subjects.subject_name;
+                if (!acc[subjectName]) {
+                    acc[subjectName] = [];
+                }
+                acc[subjectName].push(enrollment);
+                return acc;
+            }, {});
+
+            let tableHtml = <h2 class="text-xl font-semibold text-gray-800 mb-4">Student Attendance Overview</h2>;
+            for (const subjectName in groupedBySubject) {
+                tableHtml += `
+                    <h3 class="text-lg font-medium text-gray-700 mt-6 mb-2">Subject: ${subjectName}</h3>
+                    <div class="overflow-x-auto mb-4">
+                        <table>
+                            <thead>
+                                <tr class="rounded-lg">
+                                    <th class="rounded-l-lg">Student Name</th>
+                                    <th>Present / Total</th>
+                                    <th class="rounded-r-lg">Percentage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                groupedBySubject[subjectName].forEach(enrollment => {
+                    const stats = attendanceMap[${enrollment.student_id}-${enrollment.subject_id}] || { present: 0, total: 0 };
+                    const percentage = stats.total > 0 ? ((stats.present / stats.total) * 100).toFixed(2) : 0;
+                    tableHtml += `
+                        <tr class="shadow-sm rounded-lg">
+                            <td class="rounded-l-lg">${enrollment.profiles.full_name}</td>
+                            <td>${stats.present} / ${stats.total}</td>
+                            <td class="rounded-r-lg ${percentage < 75 ? 'status-absent' : 'status-present'}">${percentage}%</td>
+                        </tr>
+                    `;
+                });
+                tableHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            contentDiv.innerHTML = tableHtml;
+        };
+
+        // --- Data and Authentication Logic ---
+
+        const handleLogin = async (event) => {
+            event.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            const domain = '@parul.in';
+            if (!email.endsWith(domain) || email.split('@')[0] !== password) {
+                renderLogin('Invalid email or password format.');
+                return;
+            }
+
+            const profileId = parseInt(email.replace(domain, ''), 10);
+            
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('id, role')
+                .eq('id', profileId)
+                .single();
+
+            if (error || !profile) {
+                renderLogin('Profile not found. Please check your ID.');
+                return;
+            }
+
+            userId = profile.id;
+            userRole = profile.role;
+            renderDashboard();
+            fetchAttendanceData();
+        };
+
+        const handleLogout = () => {
+            userId = null;
+            userRole = 'student';
+            renderLogin();
+        };
+
+        const fetchAttendanceData = async () => {
+            if (userRole === 'teacher') {
+                // Fetch subjects for the current teacher
+                const { data: teacherSubjects, error: tsError } = await supabase
+                    .from('teacher_subjects')
+                    .select('subject_id')
+                    .eq('teacher_id', userId);
+
+                if (tsError) {
+                    console.error('Error fetching teacher subjects:', tsError.message);
+                    document.getElementById('dashboard-content').innerHTML = <div class="alert-box">Error loading teacher subjects.</div>;
+                    return;
+                }
+
+                const subjectIds = teacherSubjects.map(ts => ts.subject_id);
+
+                // Fetch all students enrolled in the teacher's subjects
+                const { data: enrolledStudents, error: esError } = await supabase
+                    .from('student_subjects')
+                    .select('student_id, subject_id, profiles(full_name), subjects(subject_name)')
+                    .in('subject_id', subjectIds);
+
+                if (esError) {
+                    console.error('Error fetching enrolled students:', esError.message);
+                    document.getElementById('dashboard-content').innerHTML = <div class="alert-box">Error loading student enrollments.</div>;
+                    return;
+                }
+
+                // Fetch all attendance records for the teacher's subjects
+                const { data: attendanceData, error: aError } = await supabase
+                    .from('attendance')
+                    .select('student_id, subject_id, status')
+                    .in('subject_id', subjectIds);
+
+                if (aError) {
+                    console.error('Error fetching attendance data:', aError.message);
+                    document.getElementById('dashboard-content').innerHTML = <div class="alert-box">Error loading attendance data.</div>;
+                    return;
+                }
+
+                renderTeacherView(enrolledStudents, attendanceData);
+
+            } else { // Student view
+                // Fetch all subjects for the current student
+                const { data: enrolledSubjects, error: esError } = await supabase
+                    .from('student_subjects')
+                    .select('subject_id, subjects(subject_name)')
+                    .eq('student_id', userId);
+
+                if (esError) {
+                    console.error('Error fetching student subjects:', esError.message);
+                    document.getElementById('dashboard-content').innerHTML = <div class="alert-box">Error loading your subjects.</div>;
+                    return;
+                }
+
+                const subjectIds = enrolledSubjects.map(es => es.subject_id);
+
+                // Fetch all attendance records for the student's subjects
+                const { data: attendanceData, error: aError } = await supabase
+                    .from('attendance')
+                    .select('subject_id, status')
+                    .eq('student_id', userId)
+                    .in('subject_id', subjectIds);
+                
+                if (aError) {
+                    console.error('Error fetching attendance data:', aError.message);
+                    document.getElementById('dashboard-content').innerHTML = <div class="alert-box">Error loading your attendance.</div>;
+                    return;
+                }
+
+                renderStudentView(enrolledSubjects, attendanceData);
+            }
+        };
+
+        // --- Main Initialization ---
+
+        const startApp = async () => {
+            try {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                // The app will now always start with the login page.
+                renderLogin();
+            } catch (error) {
+                console.error("Supabase initialization failed:", error);
+                document.getElementById('app').innerHTML = <div class="alert-box">An error occurred. Please check the console for details.</div>;
+            }
+        };
+
+        // Start the application
+        startApp();
+    </script>
+</body>
+</html>
