@@ -267,7 +267,7 @@
         const pctNum = stats.total ? (stats.present / stats.total) * 100 : 0;
         return `
           <tr>
-            <td class="bg-white">${subject.subject_name} <span class='text-xs text-gray-500'>(ID: ${subject.id})</span></td>
+            <td class="bg-white">${subject.subject_name} <br><span class='text-xs text-gray-500'>(ID: ${subject.id})</span></td>
             <td class="bg-white">${stats.present} / ${stats.total}</td>
             <td class="bg-white ${pctNum < 75 ? 'status-absent' : 'status-present'}">${progressBar(pctNum)}<span>${percentText(stats.present, stats.total)}</span></td>
           </tr>
@@ -318,7 +318,7 @@
       `;
       teacherSubjects.forEach((subject) => {
         html += `
-          <h3 class="text-lg font-medium text-gray-700 mt-6 mb-2">Subject: ${subject.subject_name} <span class='text-xs text-gray-500'>(ID: ${subject.id})</span></h3>
+          <h3 class="text-lg font-medium text-gray-700 mt-6 mb-2">Subject: ${subject.subject_name} <br><span class='text-xs text-gray-500'>(ID: ${subject.id})</span></h3>
           <div class="overflow-x-auto mb-4">
             <table>
               <caption class="sr-only">Attendance for ${subject.subject_name}</caption>
